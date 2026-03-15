@@ -479,10 +479,13 @@ function loadDashboard() {
   // Orders
   db.ref('orders').on('value', snap => {
     allOrders = [];
-    snap.forEach(child => allOrders.push(child.val()));
+    if (snap.exists()) snap.forEach(child => { if(child.val()) allOrders.push(child.val()); });
     allOrders.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
     renderOrders();
     updateStats();
+  }, err => {
+    console.error('Orders read error:', err);
+    document.getElementById('ordersBody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:2rem;">Error loading orders: ${err.message}</td></tr>`;
   });
 }
 
