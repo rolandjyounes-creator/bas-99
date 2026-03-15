@@ -177,11 +177,36 @@
     .divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
     .tab-active { display: block !important; }
 
+    /* Mobile bar */
+    .mobile-bar {
+      display: none; align-items: center; justify-content: space-between;
+      padding: 1rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .mobile-bar-logo { font-size: 1.4rem; font-weight: 900; color: var(--gold); letter-spacing: -0.04em; }
+    .mobile-bar-logo span { color: #fff; }
+    .hamburger { background: none; border: none; color: var(--text); font-size: 1.5rem; cursor: pointer; padding: 0.25rem; line-height: 1; }
+    .sb-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 199; }
+    .sb-overlay.show { display: block; }
+
+    /* Archive card */
+    .archive-card { display:flex; gap:1.25rem; align-items:flex-start; flex-wrap:wrap; }
+
     @media (max-width: 768px) {
-      .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; bottom: auto; }
-      .sb-nav { display: flex; overflow-x: auto; padding: 0.5rem; }
-      .main-content { margin-left: 0; max-width: 100%; }
+      .mobile-bar { display: flex; }
+      .sidebar {
+        position: fixed; top: 0; left: -270px; width: 260px; height: 100vh;
+        transition: left 0.28s ease; z-index: 200; overflow-y: auto;
+      }
+      .sidebar.open { left: 0; }
+      .main-content { margin-left: 0; max-width: 100%; padding: 1rem; }
       .layout { flex-direction: column; }
+      .fg-row { grid-template-columns: 1fr; }
+      .fg-row3 { grid-template-columns: 1fr; }
+      .item-preview { flex-direction: column; }
+      .item-img-thumb { width: 100%; height: 180px; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .archive-card { flex-direction: column; }
     }
   </style>
 </head>
@@ -200,6 +225,11 @@
 
 <!-- ── DASHBOARD ───────────────────────────────────────────── -->
 <div id="dashScreen">
+  <div class="mobile-bar">
+    <div class="mobile-bar-logo">BAS<span>99</span></div>
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+  </div>
+  <div class="sb-overlay" id="sbOverlay" onclick="toggleSidebar(false)"></div>
   <div class="layout">
     <!-- Sidebar -->
     <nav class="sidebar">
@@ -210,6 +240,7 @@
         <button class="sb-item" onclick="switchTab('pricing')" id="nav-pricing"><span class="ico">📈</span> Pricing Rules</button>
         <button class="sb-item" onclick="switchTab('orders')" id="nav-orders"><span class="ico">📦</span> Orders</button>
         <button class="sb-item" onclick="switchTab('settings')" id="nav-settings"><span class="ico">⚙️</span> Settings</button>
+        <button class="sb-item" onclick="switchTab('history')" id="nav-history"><span class="ico">🗂️</span> History</button>
       </div>
       <div class="sb-footer">
         <button class="sb-item" onclick="doLogout()" style="color:var(--danger)"><span class="ico">🔓</span> Logout</button>
@@ -358,6 +389,12 @@
         </div>
       </div>
 
+      <!-- HISTORY TAB -->
+      <div id="tab-history" style="display:none;">
+        <div class="page-title">Previous Items</div>
+        <div id="historyList"><div style="color:var(--muted);font-size:0.9rem;">Loading…</div></div>
+      </div>
+
     </main>
   </div>
 </div>
@@ -491,8 +528,9 @@ async function publishItem() {
   const qty   = parseInt(document.getElementById('niQty').value);
   if (!name || isNaN(price) || isNaN(qty) || qty < 1) { notify('Fill in all required fields', 'err'); return; }
 
-  let imageUrl = '';
-  const file = document.getElementById('niImageFile').files[0];
+  const fileInput = document.getElementById('niImageFile');
+  let imageUrl = fileInput.dataset.existingUrl || '';
+  const file = fileInput.files[0];
   if (file) {
     try {
       notify('Uploading photo…', 'ok');
@@ -683,11 +721,71 @@ async function markSoldOut() {
 
 // ── TAB NAVIGATION ────────────────────────────────────────────
 function switchTab(name) {
-  ['overview','newitem','pricing','orders','settings'].forEach(t => {
+  ['overview','newitem','pricing','orders','settings','history'].forEach(t => {
     document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
     const nav = document.getElementById('nav-' + t);
     if (nav) nav.classList.toggle('active', t === name);
   });
+  if (name === 'history') loadHistory();
+  if (window.innerWidth <= 768) toggleSidebar(false);
+}
+
+// ── SIDEBAR TOGGLE (MOBILE) ────────────────────────────────────
+function toggleSidebar(force) {
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sbOverlay');
+  const open = force !== undefined ? force : !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  ov.classList.toggle('show', open);
+}
+
+// ── HISTORY ───────────────────────────────────────────────────
+async function loadHistory() {
+  const el = document.getElementById('historyList');
+  el.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">Loading…</div>';
+  try {
+    const snap = await db.ref('archivedItems').once('value');
+    const sym = settings.currency || '$';
+    if (!snap.exists()) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No previous items yet.</div>';
+      return;
+    }
+    const items = [];
+    snap.forEach(c => items.push(c.val()));
+    items.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    el.innerHTML = items.map(d => `
+      <div class="card">
+        <div class="archive-card">
+          <div class="item-img-thumb" style="width:80px;height:80px;flex-shrink:0;">
+            ${d.imageUrl ? `<img src="${d.imageUrl}" alt="">` : '📦'}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div class="item-name" style="margin-bottom:0.3rem;">${d.name}</div>
+            <div style="font-size:0.82rem;color:var(--muted);margin-bottom:0.5rem;">${d.description||''}</div>
+            <div style="font-size:0.82rem;color:var(--muted);">Base: <strong style="color:var(--gold)">${sym}${(d.basePrice||0).toFixed(2)}</strong> &nbsp;·&nbsp; Qty: ${d.initialQty||0}</div>
+          </div>
+          <button class="btn btn-ghost" style="flex-shrink:0;" onclick='editArchived(${JSON.stringify(d).replace(/\\/g,"\\\\").replace(/'/g,"&#39;")})'>✏️ Edit &amp; Re-publish</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { el.innerHTML = '<div style="color:var(--danger);">Error loading history</div>'; console.error(e); }
+}
+
+function editArchived(d) {
+  switchTab('newitem');
+  document.getElementById('niName').value  = d.name || '';
+  document.getElementById('niDesc').value  = d.description || '';
+  document.getElementById('niPrice').value = d.basePrice || '';
+  document.getElementById('niQty').value   = d.initialQty || '';
+  document.getElementById('niImageFile').value = '';
+  document.getElementById('niImageFile').dataset.existingUrl = d.imageUrl || '';
+  if (d.imageUrl) {
+    document.getElementById('imgFileName').textContent = 'Using previous photo — choose new to replace';
+    document.getElementById('imgPreview').src = d.imageUrl;
+    document.getElementById('imgPreviewWrap').style.display = 'block';
+  } else {
+    document.getElementById('imgFileName').textContent = 'No file chosen';
+    document.getElementById('imgPreviewWrap').style.display = 'none';
+  }
 }
 
 // ── NOTIFY ────────────────────────────────────────────────────
