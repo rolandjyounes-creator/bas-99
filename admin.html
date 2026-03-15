@@ -15,11 +15,12 @@
       --danger: #ef4444; --success: #10b981; --info: #3b82f6; --border: #2D1440;
       --sidebar: 220px;
     }
+    html, body { height: 100%; overflow: hidden; }
     body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
 
     /* ── LOGIN ─────────────────────────────────────────── */
     #loginScreen {
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center;
       padding: 1.5rem;
     }
     .login-box {
@@ -40,8 +41,9 @@
     .login-err { font-size: 0.82rem; color: var(--danger); margin-bottom: 1rem; min-height: 1.2rem; }
 
     /* ── LAYOUT ─────────────────────────────────────────── */
-    #dashScreen { display: none; min-height: 100vh; }
-    .layout { display: flex; min-height: 100vh; }
+    #dashScreen { display: none; height: 100vh; overflow: hidden; flex-direction: column; }
+    .mobile-bar { flex-shrink: 0; }
+    .layout { flex: 1; min-height: 0; display: flex; overflow: hidden; }
 
     /* Sidebar */
     .sidebar {
@@ -63,7 +65,7 @@
     .sb-footer { padding: 1rem; border-top: 1px solid var(--border); }
 
     /* Main content */
-    .main-content { margin-left: var(--sidebar); flex: 1; padding: 2rem; max-width: calc(100% - var(--sidebar)); }
+    .main-content { margin-left: var(--sidebar); flex: 1; padding: 1.5rem; overflow-y: auto; height: 100%; max-width: calc(100% - var(--sidebar)); }
     .page-title { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 2rem; }
 
     /* ── CARDS / SECTIONS ──────────────────────────────── */
@@ -198,8 +200,8 @@
         transition: left 0.28s ease; z-index: 200; overflow-y: auto;
       }
       .sidebar.open { left: 0; }
-      .main-content { margin-left: 0; max-width: 100%; padding: 1rem; }
-      .layout { flex-direction: column; }
+      .layout { height: calc(100vh - 56px); }
+      .main-content { margin-left: 0; max-width: 100%; padding: 0.75rem; height: 100%; overflow-y: auto; }
       .fg-row { grid-template-columns: 1fr; }
       .fg-row3 { grid-template-columns: 1fr; }
       .item-preview { flex-direction: column; }
@@ -471,7 +473,7 @@ async function doLogin() {
 function grantAccess() {
   sessionStorage.setItem('bas99_admin', '1');
   document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('dashScreen').style.display = 'block';
+  document.getElementById('dashScreen').style.display = 'flex';
   loadDashboard();
 }
 
