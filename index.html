@@ -408,19 +408,34 @@ let item = null, settings = {}, currentPrice = 0, currentQty = 0, initQty = 1, s
 
 // ─── INIT ─────────────────────────────────────────────────────
 function init() {
-  db.ref('settings').on('value', snap => {
-    settings = snap.val() || {};
-    renderIG();
-    // Logo
-    const face = document.getElementById('logoFace');
-    if (settings.logoPhoto) {
-      face.innerHTML = `<img src="${settings.logoPhoto}" alt="logo">`;
+  // Timeout — show retry after 8s if Firebase hasn't responded
+  const loadTimeout = setTimeout(() => {
+    const ls = document.getElementById('stateLoading');
+    if (ls.style.display !== 'none') {
+      ls.innerHTML = `<div class="state-icon">⚠️</div>
+        <div style="color:var(--muted);margin-bottom:1rem;">Connection is slow…</div>
+        <button onclick="location.reload()" style="background:var(--gold);color:#000;border:none;padding:0.75rem 1.5rem;border-radius:0.75rem;font-weight:700;cursor:pointer;font-size:0.9rem;">Retry</button>`;
     }
-    if (settings.storeName) document.getElementById('logoName').textContent = settings.storeName;
-    if (settings.storeTagline) document.getElementById('logoSub').textContent = settings.storeTagline;
+  }, 8000);
+
+  // Load settings WITHOUT logo photo (fast)
+  db.ref('settings').on('value', snap => {
+    const s = snap.val() || {};
+    settings = s;
+    renderIG();
+    if (s.storeName) document.getElementById('logoName').textContent = s.storeName;
+    if (s.storeTagline) document.getElementById('logoSub').textContent = s.storeTagline;
   });
 
+  // Load logo photo separately (it's large base64)
+  db.ref('settings/logoPhoto').on('value', snap => {
+    const photo = snap.val();
+    if (photo) document.getElementById('logoFace').innerHTML = `<img src="${photo}" alt="logo">`;
+  });
+
+  // Load item metadata fast (without imageUrl)
   db.ref('currentItem').on('value', snap => {
+    clearTimeout(loadTimeout);
     const data = snap.val();
     document.getElementById('stateLoading').style.display = 'none';
 
@@ -429,10 +444,22 @@ function init() {
       document.getElementById('stateProduct').style.display = 'none';
       return;
     }
+    // Render without image first for instant display
     item = data;
     document.getElementById('stateProduct').style.display = 'block';
     document.getElementById('stateEmpty').style.display = 'none';
-    renderProduct(data);
+    renderProduct({...data, imageUrl: ''});
+
+    // Load image lazily after page shows
+    if (data.imageUrl) {
+      setTimeout(() => {
+        const img = document.getElementById('productImg');
+        img.src = data.imageUrl;
+        img.style.display = 'block';
+        document.getElementById('imgPlaceholder').style.display = 'none';
+        item.imageUrl = data.imageUrl;
+      }, 100);
+    }
   });
 }
 
