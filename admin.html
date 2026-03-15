@@ -7,6 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -246,8 +247,15 @@
           <div class="card-title">Item Details</div>
           <div class="fg"><label>Item Name *</label><input id="niName" type="text" placeholder="e.g. Nike Air Max 90 — Size 42"></div>
           <div class="fg"><label>Description</label><textarea id="niDesc" placeholder="Short description of the item…"></textarea></div>
-          <div class="fg"><label>Image URL</label><input id="niImage" type="url" placeholder="https://example.com/image.jpg" oninput="previewImg()"></div>
-          <div id="imgPreviewWrap" style="display:none;margin-bottom:1rem;">
+          <div class="fg">
+            <label>Product Photo</label>
+            <input type="file" id="niImageFile" accept="image/*" style="display:none" onchange="previewImg()">
+            <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+              <button type="button" class="btn btn-ghost" onclick="document.getElementById('niImageFile').click()">📷 Choose Photo</button>
+              <span id="imgFileName" style="font-size:0.82rem;color:var(--muted);">No file chosen</span>
+            </div>
+          </div>
+          <div id="imgPreviewWrap" style="display:none;margin:0.5rem 0 1rem;">
             <img id="imgPreview" src="" style="max-width:200px;border-radius:0.75rem;border:1px solid var(--border);">
           </div>
           <div class="fg-row">
@@ -362,7 +370,7 @@
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBaZgi8DkOjg0O17deciRvmkJEewNer1To",
   authDomain: "bas99-26c7f.firebaseapp.com",
-  databaseURL: "https://bas99-26c7f-default-rtdb.firebaseio.com",
+  databaseURL: "https://bas99-26c7f-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "bas99-26c7f",
   storageBucket: "bas99-26c7f.firebasestorage.app",
   messagingSenderId: "26764535075",
@@ -483,11 +491,23 @@ async function publishItem() {
   const qty   = parseInt(document.getElementById('niQty').value);
   if (!name || isNaN(price) || isNaN(qty) || qty < 1) { notify('Fill in all required fields', 'err'); return; }
 
+  let imageUrl = '';
+  const file = document.getElementById('niImageFile').files[0];
+  if (file) {
+    try {
+      notify('Uploading photo…', 'ok');
+      const storage = firebase.storage();
+      const ref = storage.ref('items/' + Date.now() + '_' + file.name);
+      await ref.put(file);
+      imageUrl = await ref.getDownloadURL();
+    } catch (e) { notify('Photo upload failed', 'err'); console.error(e); return; }
+  }
+
   const item = {
     id: 'item_' + Date.now(),
     name,
     description: document.getElementById('niDesc').value.trim(),
-    imageUrl: document.getElementById('niImage').value.trim(),
+    imageUrl,
     basePrice: price,
     currentPrice: price,
     initialQty: qty,
@@ -498,7 +518,6 @@ async function publishItem() {
   };
 
   try {
-    // Archive old item if exists
     if (currentItem && currentItem.id) {
       await db.ref('archivedItems/' + currentItem.id).set(currentItem);
     }
@@ -510,15 +529,23 @@ async function publishItem() {
 }
 
 function clearNewItem() {
-  ['niName','niDesc','niImage','niPrice','niQty'].forEach(id => document.getElementById(id).value = '');
+  ['niName','niDesc','niPrice','niQty'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('niImageFile').value = '';
+  document.getElementById('imgFileName').textContent = 'No file chosen';
   document.getElementById('imgPreviewWrap').style.display = 'none';
 }
 
 function previewImg() {
-  const url = document.getElementById('niImage').value.trim();
+  const file = document.getElementById('niImageFile').files[0];
   const wrap = document.getElementById('imgPreviewWrap');
-  if (url) { document.getElementById('imgPreview').src = url; wrap.style.display = 'block'; }
-  else wrap.style.display = 'none';
+  if (file) {
+    document.getElementById('imgFileName').textContent = file.name;
+    document.getElementById('imgPreview').src = URL.createObjectURL(file);
+    wrap.style.display = 'block';
+  } else {
+    document.getElementById('imgFileName').textContent = 'No file chosen';
+    wrap.style.display = 'none';
+  }
 }
 
 // ── PRICING RULES ─────────────────────────────────────────────
