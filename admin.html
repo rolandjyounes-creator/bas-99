@@ -489,11 +489,12 @@ function loadDashboard() {
 // ── STATS ─────────────────────────────────────────────────────
 function updateStats() {
   const sym = settings.currency || '$';
-  document.getElementById('statOrders').textContent  = allOrders.length;
-  const rev = allOrders.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+(o.price||0),0);
+  const currentOrders = currentItem ? allOrders.filter(o => o.itemId === currentItem.id) : allOrders;
+  document.getElementById('statOrders').textContent  = currentOrders.length;
+  const rev = currentOrders.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+(o.price||0),0);
   document.getElementById('statRevenue').textContent = sym + rev.toFixed(2);
   document.getElementById('statQty').textContent     = currentItem ? (currentItem.currentQty || 0) : '—';
-  document.getElementById('statPending').textContent = allOrders.filter(o=>o.status==='pending').length;
+  document.getElementById('statPending').textContent = currentOrders.filter(o=>o.status==='pending').length;
 }
 
 // ── CURRENT ITEM ──────────────────────────────────────────────
