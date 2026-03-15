@@ -265,7 +265,8 @@
           <div id="currentItemPreview"><div style="color:var(--muted);font-size:0.9rem;">No item active. Add one below.</div></div>
           <hr class="divider">
           <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
-            <button class="btn btn-ghost" onclick="switchTab('newitem')">+ Add / Replace Item</button>
+            <button class="btn btn-primary" onclick="editCurrentItem()">✏️ Edit Current Item</button>
+            <button class="btn btn-ghost" onclick="switchTab('newitem')">+ New Item</button>
             <button class="btn btn-danger" onclick="markSoldOut()">Mark as Sold Out</button>
           </div>
         </div>
@@ -273,7 +274,7 @@
 
       <!-- NEW ITEM TAB -->
       <div id="tab-newitem" style="display:none;">
-        <div class="page-title">Add / Replace Item</div>
+        <div class="page-title" id="newitemTitle">Add / Replace Item</div>
         <div class="card">
           <div class="card-title">Item Details</div>
           <div class="fg"><label>Item Name *</label><input id="niName" type="text" placeholder="e.g. Nike Air Max 90 — Size 42"></div>
@@ -418,7 +419,7 @@ firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.database();
 
 // ── STATE ─────────────────────────────────────────────────────
-let allOrders = [], currentFilter = 'all', pricingRules = [], settings = {}, currentItem = null;
+let allOrders = [], currentFilter = 'all', pricingRules = [], settings = {}, currentItem = null, editingCurrent = false;
 
 // ── AUTH ──────────────────────────────────────────────────────
 async function doLogin() {
@@ -541,7 +542,16 @@ async function publishItem() {
     } catch (e) { notify('Photo upload failed', 'err'); console.error(e); return; }
   }
 
-  const item = {
+  const item = editingCurrent ? {
+    ...currentItem,
+    name,
+    description: document.getElementById('niDesc').value.trim(),
+    imageUrl,
+    basePrice: price,
+    currentPrice: price,
+    currentQty: qty,
+    initialQty: currentItem.initialQty || qty,
+  } : {
     id: 'item_' + Date.now(),
     name,
     description: document.getElementById('niDesc').value.trim(),
@@ -556,17 +566,21 @@ async function publishItem() {
   };
 
   try {
-    if (currentItem && currentItem.id) {
+    if (!editingCurrent && currentItem && currentItem.id) {
       await db.ref('archivedItems/' + currentItem.id).set(currentItem);
     }
     await db.ref('currentItem').set(item);
-    notify('Item published!', 'ok');
+    notify(editingCurrent ? 'Item updated!' : 'Item published!', 'ok');
+    editingCurrent = false;
+    document.getElementById('newitemTitle').textContent = 'Add / Replace Item';
     clearNewItem();
     switchTab('overview');
-  } catch (e) { notify('Error publishing item', 'err'); console.error(e); }
+  } catch (e) { notify('Error saving item', 'err'); console.error(e); }
 }
 
 function clearNewItem() {
+  editingCurrent = false;
+  document.getElementById('newitemTitle').textContent = 'Add / Replace Item';
   ['niName','niDesc','niPrice','niQty'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('niImageFile').value = '';
   document.getElementById('imgFileName').textContent = 'No file chosen';
@@ -768,6 +782,27 @@ async function loadHistory() {
         </div>
       </div>`).join('');
   } catch(e) { el.innerHTML = '<div style="color:var(--danger);">Error loading history</div>'; console.error(e); }
+}
+
+function editCurrentItem() {
+  if (!currentItem) { notify('No active item to edit', 'err'); return; }
+  editingCurrent = true;
+  document.getElementById('newitemTitle').textContent = 'Edit Current Item';
+  switchTab('newitem');
+  document.getElementById('niName').value  = currentItem.name || '';
+  document.getElementById('niDesc').value  = currentItem.description || '';
+  document.getElementById('niPrice').value = currentItem.basePrice || '';
+  document.getElementById('niQty').value   = currentItem.currentQty || '';
+  document.getElementById('niImageFile').value = '';
+  document.getElementById('niImageFile').dataset.existingUrl = currentItem.imageUrl || '';
+  if (currentItem.imageUrl) {
+    document.getElementById('imgFileName').textContent = 'Using current photo — choose new to replace';
+    document.getElementById('imgPreview').src = currentItem.imageUrl;
+    document.getElementById('imgPreviewWrap').style.display = 'block';
+  } else {
+    document.getElementById('imgFileName').textContent = 'No file chosen';
+    document.getElementById('imgPreviewWrap').style.display = 'none';
+  }
 }
 
 function editArchived(d) {
