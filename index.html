@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>BAS99 — One Deal at a Time</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #080808; --surface: #111; --surface2: #1a1a1a;
+      --gold: #f0b429; --gold2: #d97706; --text: #f5f5f5;
+      --muted: #888; --danger: #ef4444; --success: #10b981; --border: #222;
+    }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    /* HEADER */
+    header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between;
+      background: rgba(8,8,8,0.92); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 1.6rem; font-weight: 900; letter-spacing: -0.04em; color: var(--gold); }
+    .logo span { color: #fff; }
+    .tagline { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+    /* MAIN */
+    main { padding-top: 72px; min-height: 100vh; }
+    /* LOADING */
+    .state-screen {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: calc(100vh - 72px); gap: 1rem; color: var(--muted); text-align: center; padding: 2rem;
+    }
+    .state-icon { font-size: 3.5rem; }
+    /* PRODUCT LAYOUT */
+    .product-wrap {
+      max-width: 1080px; margin: 0 auto; padding: 3rem 1.5rem;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: start;
+    }
+    @media (max-width: 720px) { .product-wrap { grid-template-columns: 1fr; gap: 2rem; padding: 1.5rem; } }
+    /* IMAGE */
+    .img-box {
+      position: relative; border-radius: 1.5rem; overflow: hidden; aspect-ratio: 1;
+      background: var(--surface); box-shadow: 0 0 0 1px var(--border);
+    }
+    .img-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .img-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 6rem; }
+    .soldout-overlay {
+      display: none; position: absolute; inset: 0;
+      background: rgba(0,0,0,0.75); align-items: center; justify-content: center;
+    }
+    .soldout-badge {
+      background: var(--danger); color: #fff; font-size: 1.4rem; font-weight: 900;
+      padding: 0.8rem 2rem; border-radius: 0.75rem; letter-spacing: 0.12em;
+      transform: rotate(-5deg); box-shadow: 0 4px 20px rgba(239,68,68,0.4);
+    }
+    /* INFO */
+    .badge-live {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: rgba(240,180,41,0.12); border: 1px solid rgba(240,180,41,0.3);
+      color: var(--gold); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; padding: 0.3rem 0.75rem; border-radius: 100px; margin-bottom: 1.2rem;
+    }
+    .badge-live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); animation: blink 1.4s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+    h1.product-name {
+      font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 900;
+      line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 1rem;
+    }
+    p.product-desc { color: var(--muted); line-height: 1.7; margin-bottom: 2rem; font-size: 0.95rem; }
+    /* PRICE */
+    .price-row { margin-bottom: 1.8rem; }
+    .price-amount { font-size: 2.6rem; font-weight: 900; color: var(--gold); letter-spacing: -0.03em; line-height: 1; }
+    .price-was { font-size: 1rem; color: var(--muted); text-decoration: line-through; margin-left: 0.5rem; }
+    .price-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.4rem; }
+    /* QTY */
+    .qty-row { margin-bottom: 2rem; }
+    .qty-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.6rem; }
+    .qty-main { display: flex; align-items: center; gap: 1rem; }
+    .qty-num { font-size: 2rem; font-weight: 800; min-width: 3rem; }
+    .bar-wrap { flex: 1; height: 5px; background: var(--surface2); border-radius: 100px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 100px; transition: width 0.6s ease, background 0.4s; }
+    .qty-tag { font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+    /* BUTTONS */
+    .btn-buy {
+      width: 100%; padding: 1.15rem; background: var(--gold); color: #000;
+      font-family: 'Inter', sans-serif; font-size: 1rem; font-weight: 800;
+      letter-spacing: 0.06em; text-transform: uppercase; border: none;
+      border-radius: 1rem; cursor: pointer; transition: all 0.2s; margin-bottom: 0.8rem;
+    }
+    .btn-buy:hover:not(:disabled) { background: #fbbf24; transform: translateY(-2px); box-shadow: 0 8px 28px rgba(240,180,41,0.35); }
+    .btn-buy:active:not(:disabled) { transform: translateY(0); }
+    .btn-buy:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+    .btn-ig {
+      width: 100%; padding: 0.85rem; background: transparent; color: var(--text);
+      font-family: 'Inter', sans-serif; font-size: 0.88rem; font-weight: 600;
+      border: 1px solid var(--border); border-radius: 1rem; cursor: pointer;
+      transition: all 0.2s; display: none; align-items: center; justify-content: center;
+      gap: 0.5rem; text-decoration: none;
+    }
+    .btn-ig:hover { border-color: #e1306c; color: #e1306c; background: rgba(225,48,108,0.06); }
+    /* MODAL BACKDROP */
+    .modal-bg {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.88); backdrop-filter: blur(10px);
+      z-index: 1000; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 1.5rem;
+      width: 100%; max-width: 460px; max-height: 92vh; overflow-y: auto;
+    }
+    .modal-top {
+      padding: 1.2rem 1.5rem 0; display: flex; align-items: center; justify-content: space-between;
+    }
+    /* STEP DOTS */
+    .steps { display: flex; align-items: center; gap: 6px; }
+    .sdot {
+      width: 8px; height: 8px; border-radius: 4px; background: var(--border); transition: all 0.3s;
+    }
+    .sdot.active { width: 24px; background: var(--gold); }
+    .sdot.done { background: var(--success); }
+    .btn-close {
+      background: var(--surface2); border: none; color: var(--muted);
+      width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-close:hover { color: var(--text); }
+    /* STEP BODY */
+    .step-body { padding: 1.5rem; }
+    .step-head { font-size: 1.2rem; font-weight: 800; margin-bottom: 1.5rem; }
+    /* SUMMARY CARD */
+    .summary-card { background: var(--surface2); border-radius: 1rem; padding: 1.2rem; margin-bottom: 1.5rem; }
+    .srow { display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.9rem; }
+    .srow .lbl { color: var(--muted); }
+    .srow.total { border-top: 1px solid var(--border); margin-top: 0.5rem; padding-top: 0.75rem; font-weight: 700; font-size: 1.05rem; }
+    /* FORM */
+    .fg { margin-bottom: 1rem; }
+    .fg label { display: block; font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
+    .fg input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); font-family: 'Inter', sans-serif; font-size: 0.95rem;
+      padding: 0.82rem 1rem; border-radius: 0.75rem; outline: none; transition: border-color 0.2s;
+    }
+    .fg input:focus { border-color: var(--gold); }
+    .fg input::placeholder { color: #555; }
+    .fg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+    /* COD */
+    .cod-box {
+      background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25);
+      color: var(--success); padding: 0.9rem 1rem; border-radius: 0.75rem;
+      font-size: 0.85rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    /* ACTION BTNS */
+    .btn-next {
+      width: 100%; padding: 1rem; background: var(--gold); color: #000;
+      font-family: 'Inter', sans-serif; font-size: 0.95rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.06em; border: none; border-radius: 0.75rem; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-next:hover:not(:disabled) { background: #fbbf24; }
+    .btn-next:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+    .btn-back { width: 100%; padding: 0.7rem; background: transparent; color: var(--muted); font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 600; border: none; cursor: pointer; margin-top: 0.5rem; transition: color 0.2s; }
+    .btn-back:hover { color: var(--text); }
+    /* SUCCESS */
+    .success-wrap { padding: 2rem; text-align: center; }
+    .success-icon { width: 80px; height: 80px; background: rgba(16,185,129,0.12); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2.5rem; }
+    .order-id-box { background: var(--surface2); border-radius: 0.75rem; padding: 0.9rem; font-size: 0.82rem; color: var(--muted); margin: 1rem 0 1.5rem; }
+    /* TOAST */
+    .toast {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(80px);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem;
+      padding: 0.8rem 1.5rem; font-size: 0.88rem; z-index: 9999; opacity: 0; transition: all 0.3s; white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    /* URGENCY */
+    @keyframes pulse-red { 0%,100%{color:var(--danger)} 50%{color:#ff6b6b} }
+    .urgent .qty-num { animation: pulse-red 1.2s ease-in-out infinite; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+    .product-wrap { animation: fadeUp 0.5s ease; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">BAS<span>99</span></div>
+  <div class="tagline">One Deal · One Chance</div>
+</header>
+
+<main>
+  <!-- LOADING -->
+  <div id="stateLoading" class="state-screen">
+    <div class="state-icon">⚡</div>
+    <div>Loading current deal…</div>
+  </div>
+
+  <!-- NO ITEM / SOLD OUT COMING SOON -->
+  <div id="stateEmpty" class="state-screen" style="display:none;">
+    <div class="state-icon">🔜</div>
+    <h2 style="font-size:1.8rem;font-weight:900;color:#fff;margin-bottom:0.5rem;">Coming Soon</h2>
+    <p style="max-width:320px;">The next deal is being prepared. Follow us on Instagram to be the first to know.</p>
+    <a id="igBtnEmpty" href="#" target="_blank" class="btn-ig" style="display:none; margin-top:1.5rem; max-width:280px;"></a>
+  </div>
+
+  <!-- PRODUCT PAGE -->
+  <div id="stateProduct" style="display:none;">
+    <div class="product-wrap">
+      <!-- Image -->
+      <div>
+        <div class="img-box" id="imgBox">
+          <img id="productImg" src="" alt="" style="display:none;">
+          <div id="imgPlaceholder" class="img-placeholder">📦</div>
+          <div class="soldout-overlay" id="soldoutOverlay">
+            <div class="soldout-badge">SOLD OUT</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info -->
+      <div>
+        <div class="badge-live">Live Deal</div>
+        <h1 class="product-name" id="productName">—</h1>
+        <p class="product-desc" id="productDesc"></p>
+
+        <div class="price-row">
+          <span class="price-amount" id="priceAmount">—</span>
+          <span class="price-was" id="priceWas" style="display:none;"></span>
+          <div class="price-note" id="priceNote"></div>
+        </div>
+
+        <div class="qty-row" id="qtyRow">
+          <div class="qty-label">Units Remaining</div>
+          <div class="qty-main">
+            <div class="qty-num" id="qtyNum">—</div>
+            <div class="bar-wrap"><div class="bar-fill" id="barFill" style="width:100%"></div></div>
+            <div class="qty-tag" id="qtyTag"></div>
+          </div>
+        </div>
+
+        <button class="btn-buy" id="btnBuy" onclick="openCheckout()">CLAIM THIS DEAL</button>
+        <a class="btn-ig" id="igBtn" href="#" target="_blank">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+          <span id="igBtnText">Follow on Instagram</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- CHECKOUT MODAL -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-top">
+      <div class="steps">
+        <div class="sdot active" id="d1"></div>
+        <div class="sdot" id="d2"></div>
+        <div class="sdot" id="d3"></div>
+      </div>
+      <button class="btn-close" onclick="closeCheckout()">✕</button>
+    </div>
+
+    <!-- STEP 1: Confirm Item -->
+    <div class="step-body" id="s1">
+      <div class="step-head">Confirm Your Item</div>
+      <div class="summary-card" id="s1Card"></div>
+      <button class="btn-next" onclick="goStep(2)">Continue →</button>
+      <button class="btn-back" onclick="closeCheckout()">Cancel</button>
+    </div>
+
+    <!-- STEP 2: Customer Details -->
+    <div class="step-body" id="s2" style="display:none;">
+      <div class="step-head">Delivery Details</div>
+      <div class="fg">
+        <label>Full Name</label>
+        <input id="fName" type="text" placeholder="Your full name" autocomplete="name" required>
+      </div>
+      <div class="fg">
+        <label>Phone Number</label>
+        <input id="fPhone" type="tel" placeholder="+1 555 000 0000" autocomplete="tel" required>
+      </div>
+      <div class="fg">
+        <label>Email Address</label>
+        <input id="fEmail" type="email" placeholder="you@email.com" autocomplete="email" required>
+      </div>
+      <div class="fg">
+        <label>Street Address</label>
+        <input id="fAddress" type="text" placeholder="Street address" autocomplete="street-address" required>
+      </div>
+      <div class="fg-row">
+        <div class="fg">
+          <label>City</label>
+          <input id="fCity" type="text" placeholder="City" autocomplete="address-level2" required>
+        </div>
+        <div class="fg">
+          <label>State / Region</label>
+          <input id="fState" type="text" placeholder="State" autocomplete="address-level1">
+        </div>
+      </div>
+      <button class="btn-next" onclick="goStep(3)">Review Order →</button>
+      <button class="btn-back" onclick="goStep(1)">← Back</button>
+    </div>
+
+    <!-- STEP 3: Review & Confirm -->
+    <div class="step-body" id="s3" style="display:none;">
+      <div class="step-head">Review & Confirm</div>
+      <div class="summary-card" id="s3Card"></div>
+      <div class="cod-box">✓ Payment: <strong>Cash on Delivery (COD)</strong> — pay when your order arrives</div>
+      <button class="btn-next" id="btnPlace" onclick="placeOrder()">PLACE ORDER</button>
+      <button class="btn-back" onclick="goStep(2)">← Back</button>
+    </div>
+
+    <!-- SUCCESS -->
+    <div id="sSuccess" style="display:none;">
+      <div class="success-wrap">
+        <div class="success-icon">✅</div>
+        <h3 style="font-size:1.5rem;font-weight:900;margin-bottom:0.5rem;">Order Confirmed!</h3>
+        <p style="color:var(--muted);">We'll reach out shortly to arrange delivery.</p>
+        <div class="order-id-box" id="orderIdBox"></div>
+        <button class="btn-next" onclick="closeCheckout()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── FIREBASE CONFIG ─────────────────────────────────────────
+// Replace these values with your Firebase project credentials
+// (see README.md for setup instructions)
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+
+// ─── STATE ────────────────────────────────────────────────────
+let item = null, settings = {}, currentPrice = 0, currentQty = 0, initQty = 1, step = 1;
+
+// ─── INIT ─────────────────────────────────────────────────────
+function init() {
+  db.ref('settings').on('value', snap => {
+    settings = snap.val() || {};
+    renderIG();
+  });
+
+  db.ref('currentItem').on('value', snap => {
+    const data = snap.val();
+    document.getElementById('stateLoading').style.display = 'none';
+
+    if (!data || !data.isActive) {
+      document.getElementById('stateEmpty').style.display = 'flex';
+      document.getElementById('stateProduct').style.display = 'none';
+      return;
+    }
+    item = data;
+    document.getElementById('stateProduct').style.display = 'block';
+    document.getElementById('stateEmpty').style.display = 'none';
+    renderProduct(data);
+  });
+}
+
+// ─── RENDER PRODUCT ───────────────────────────────────────────
+function renderProduct(d) {
+  currentQty = d.currentQty || 0;
+  initQty    = d.initialQty  || 1;
+  currentPrice = calcPrice(d);
+
+  document.getElementById('productName').textContent = d.name || '—';
+  document.getElementById('productDesc').textContent = d.description || '';
+
+  // Image
+  if (d.imageUrl) {
+    const img = document.getElementById('productImg');
+    img.src = d.imageUrl; img.style.display = 'block';
+    document.getElementById('imgPlaceholder').style.display = 'none';
+  }
+
+  // Price
+  const sym = settings.currency || '$';
+  document.getElementById('priceAmount').textContent = sym + currentPrice.toFixed(2);
+  const wasEl = document.getElementById('priceWas');
+  if (currentPrice > d.basePrice) {
+    wasEl.textContent = sym + d.basePrice.toFixed(2);
+    wasEl.style.display = 'inline';
+    document.getElementById('priceNote').textContent = '↑ Price adjusted — high demand';
+  } else {
+    wasEl.style.display = 'none';
+    document.getElementById('priceNote').textContent = '';
+  }
+
+  // Qty bar
+  const pct = Math.max(0, (currentQty / initQty) * 100);
+  const bar = document.getElementById('barFill');
+  bar.style.width = pct + '%';
+  bar.style.background = pct < 15 ? '#ef4444' : pct < 40 ? '#f97316' : 'linear-gradient(90deg,#d97706,#f0b429)';
+  document.getElementById('qtyNum').textContent = currentQty;
+
+  // Tags & urgency
+  const qtyRow = document.getElementById('qtyRow');
+  const tag = document.getElementById('qtyTag');
+  if (currentQty <= 0) {
+    tag.textContent = ''; tag.style.color = '';
+    qtyRow.classList.remove('urgent');
+  } else if (currentQty <= 3) {
+    tag.textContent = '🔥 Almost gone!'; tag.style.color = 'var(--danger)';
+    qtyRow.classList.add('urgent');
+  } else if (currentQty <= Math.ceil(initQty * 0.2)) {
+    tag.textContent = 'Selling fast'; tag.style.color = '#f97316';
+    qtyRow.classList.remove('urgent');
+  } else {
+    tag.textContent = ''; tag.style.color = '';
+    qtyRow.classList.remove('urgent');
+  }
+
+  // Sold out state
+  const btn = document.getElementById('btnBuy');
+  const ov  = document.getElementById('soldoutOverlay');
+  if (currentQty <= 0) {
+    ov.style.display = 'flex'; btn.disabled = true; btn.textContent = 'SOLD OUT';
+  } else {
+    ov.style.display = 'none'; btn.disabled = false; btn.textContent = 'CLAIM THIS DEAL';
+  }
+}
+
+// ─── PRICE CALCULATION ────────────────────────────────────────
+function calcPrice(d) {
+  const base  = d.basePrice || 0;
+  const rules = d.pricingRules || [];
+  const qty   = d.currentQty  || 0;
+  let maxPct = 0;
+  rules.forEach(r => { if (qty <= r.qtyThreshold) maxPct = Math.max(maxPct, r.increasePercent || 0); });
+  return maxPct > 0 ? base * (1 + maxPct / 100) : base;
+}
+
+// ─── INSTAGRAM ────────────────────────────────────────────────
+function renderIG() {
+  const h = settings.instagramHandle;
+  const btnMain  = document.getElementById('igBtn');
+  const btnEmpty = document.getElementById('igBtnEmpty');
+  if (h) {
+    const url = 'https://instagram.com/' + h.replace('@', '');
+    btnMain.href = url; btnMain.style.display = 'flex';
+    document.getElementById('igBtnText').textContent = 'Follow @' + h.replace('@', '') + ' on Instagram';
+    btnEmpty.href = url; btnEmpty.textContent = '📸 Follow @' + h.replace('@', '') + ' on Instagram';
+    btnEmpty.style.display = 'flex';
+  } else {
+    btnMain.style.display = 'none'; btnEmpty.style.display = 'none';
+  }
+}
+
+// ─── CHECKOUT ─────────────────────────────────────────────────
+function openCheckout() {
+  if (!item || currentQty <= 0) return;
+  step = 1; updateSteps();
+
+  const sym = settings.currency || '$';
+  document.getElementById('s1Card').innerHTML = `
+    <div class="srow"><span class="lbl">Item</span><span style="font-weight:600">${item.name}</span></div>
+    <div class="srow"><span class="lbl">Quantity</span><span>1 unit</span></div>
+    <div class="srow total"><span>Total</span><span style="color:var(--gold)">${sym}${currentPrice.toFixed(2)}</span></div>`;
+
+  // Autofill from localStorage
+  const saved = JSON.parse(localStorage.getItem('bas99_customer') || '{}');
+  ['fName','fPhone','fEmail','fAddress','fCity','fState'].forEach(id => {
+    const key = id.replace('f','').toLowerCase();
+    if (saved[key]) document.getElementById(id).value = saved[key];
+  });
+
+  document.getElementById('modalBg').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeCheckout() {
+  document.getElementById('modalBg').classList.remove('open');
+  document.body.style.overflow = '';
+  setTimeout(() => {
+    document.getElementById('sSuccess').style.display = 'none';
+    showStep(1); step = 1;
+  }, 300);
+}
+
+function goStep(n) {
+  if (n === 3) {
+    const name = v('fName'), phone = v('fPhone'), email = v('fEmail'),
+          addr = v('fAddress'), city = v('fCity');
+    if (!name || !phone || !email || !addr || !city) { toast('Please fill in all required fields'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Please enter a valid email'); return; }
+
+    // Save for autofill
+    localStorage.setItem('bas99_customer', JSON.stringify({
+      name, phone, email, address: addr, city, state: v('fState')
+    }));
+
+    const sym = settings.currency || '$';
+    document.getElementById('s3Card').innerHTML = `
+      <div class="srow"><span class="lbl">Item</span><span style="font-weight:600">${item.name}</span></div>
+      <div class="srow"><span class="lbl">Qty</span><span>1 unit</span></div>
+      <div style="border-top:1px solid var(--border);margin:0.4rem 0"></div>
+      <div class="srow"><span class="lbl">Name</span><span>${name}</span></div>
+      <div class="srow"><span class="lbl">Phone</span><span>${phone}</span></div>
+      <div class="srow"><span class="lbl">Email</span><span style="font-size:0.83rem">${email}</span></div>
+      <div class="srow"><span class="lbl">Address</span><span style="text-align:right;max-width:60%;font-size:0.85rem">${addr}, ${city}${v('fState') ? ', '+v('fState') : ''}</span></div>
+      <div class="srow total"><span>Total</span><span style="color:var(--gold)">${sym}${currentPrice.toFixed(2)}</span></div>`;
+  }
+  step = n; updateSteps();
+}
+
+function showStep(n) {
+  ['s1','s2','s3','sSuccess'].forEach((id,i) => {
+    document.getElementById(id).style.display = (i === n-1) ? 'block' : 'none';
+  });
+}
+
+function updateSteps() {
+  showStep(step);
+  [1,2,3].forEach(i => {
+    const d = document.getElementById('d'+i);
+    d.className = 'sdot' + (i < step ? ' done' : i === step ? ' active' : '');
+  });
+}
+
+// ─── PLACE ORDER ──────────────────────────────────────────────
+async function placeOrder() {
+  const btn = document.getElementById('btnPlace');
+  btn.disabled = true; btn.textContent = 'Placing Order…';
+
+  // Live qty check
+  const snap = await db.ref('currentItem/currentQty').once('value');
+  if ((snap.val() || 0) <= 0) {
+    toast('Sorry — just sold out!'); btn.disabled = false; btn.textContent = 'PLACE ORDER';
+    closeCheckout(); return;
+  }
+
+  const sym = settings.currency || '$';
+  const orderId = 'ORD-' + Date.now() + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
+  const order = {
+    id: orderId, itemId: item.id || 'item', itemName: item.name,
+    price: currentPrice, currency: sym, qty: 1, status: 'pending', payment: 'COD',
+    customer: {
+      name: v('fName'), phone: v('fPhone'), email: v('fEmail'),
+      address: v('fAddress') + ', ' + v('fCity') + (v('fState') ? ', ' + v('fState') : '')
+    },
+    timestamp: new Date().toISOString(),
+    createdAt: firebase.database.ServerValue.TIMESTAMP
+  };
+
+  try {
+    await db.ref('orders/' + orderId).set(order);
+
+    // Atomic qty decrement
+    await db.ref('currentItem/currentQty').transaction(cur => cur > 0 ? cur - 1 : cur);
+
+    // Recalculate price after qty change
+    const updated = (await db.ref('currentItem').once('value')).val();
+    if (updated) {
+      const newPrice = calcPrice(updated);
+      await db.ref('currentItem/currentPrice').set(newPrice);
+    }
+
+    document.getElementById('s3').style.display = 'none';
+    document.getElementById('orderIdBox').textContent = 'Order ID: ' + orderId;
+    document.getElementById('sSuccess').style.display = 'block';
+    [1,2,3].forEach(i => document.getElementById('d'+i).className = 'sdot done');
+  } catch (e) {
+    console.error(e);
+    toast('Something went wrong. Please try again.');
+    btn.disabled = false; btn.textContent = 'PLACE ORDER';
+  }
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────
+function v(id) { return document.getElementById(id).value.trim(); }
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+init();
+</script>
+</body>
+</html>

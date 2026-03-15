@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BAS99 — Admin Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #070707; --surface: #101010; --surface2: #181818; --surface3: #222;
+      --gold: #f0b429; --gold2: #d97706; --text: #f0f0f0; --muted: #777;
+      --danger: #ef4444; --success: #10b981; --info: #3b82f6; --border: #1e1e1e;
+      --sidebar: 220px;
+    }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── LOGIN ─────────────────────────────────────────── */
+    #loginScreen {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 1.5rem;
+    }
+    .login-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 1.5rem;
+      padding: 2.5rem; width: 100%; max-width: 380px; text-align: center;
+    }
+    .login-logo { font-size: 2rem; font-weight: 900; color: var(--gold); letter-spacing: -0.04em; margin-bottom: 0.3rem; }
+    .login-logo span { color: #fff; }
+    .login-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 2rem; }
+    .login-box input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); font-family: 'Inter', sans-serif; font-size: 1rem;
+      padding: 0.9rem 1rem; border-radius: 0.75rem; outline: none; margin-bottom: 1rem;
+      transition: border-color 0.2s; text-align: center; letter-spacing: 0.15em;
+    }
+    .login-box input:focus { border-color: var(--gold); }
+    .login-box input::placeholder { letter-spacing: 0; color: #444; }
+    .login-err { font-size: 0.82rem; color: var(--danger); margin-bottom: 1rem; min-height: 1.2rem; }
+
+    /* ── LAYOUT ─────────────────────────────────────────── */
+    #dashScreen { display: none; min-height: 100vh; }
+    .layout { display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar {
+      width: var(--sidebar); background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 50;
+    }
+    .sb-logo { padding: 1.5rem; font-size: 1.4rem; font-weight: 900; color: var(--gold); letter-spacing: -0.04em; }
+    .sb-logo span { color: #fff; }
+    .sb-nav { flex: 1; padding: 0.5rem; overflow-y: auto; }
+    .sb-item {
+      display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.9rem;
+      border-radius: 0.75rem; cursor: pointer; color: var(--muted); font-size: 0.88rem;
+      font-weight: 500; transition: all 0.15s; margin-bottom: 2px; text-decoration: none; border: none;
+      background: transparent; width: 100%; font-family: 'Inter', sans-serif; text-align: left;
+    }
+    .sb-item:hover { background: var(--surface2); color: var(--text); }
+    .sb-item.active { background: rgba(240,180,41,0.1); color: var(--gold); }
+    .sb-item .ico { font-size: 1rem; width: 1.2rem; text-align: center; }
+    .sb-footer { padding: 1rem; border-top: 1px solid var(--border); }
+
+    /* Main content */
+    .main-content { margin-left: var(--sidebar); flex: 1; padding: 2rem; max-width: calc(100% - var(--sidebar)); }
+    .page-title { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 2rem; }
+
+    /* ── CARDS / SECTIONS ──────────────────────────────── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 1rem;
+      padding: 1.5rem; margin-bottom: 1.5rem;
+    }
+    .card-title { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 1.2rem; }
+
+    /* Stats bar */
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 0.9rem;
+      padding: 1.2rem; text-align: center;
+    }
+    .stat-val { font-size: 1.8rem; font-weight: 900; letter-spacing: -0.03em; color: var(--gold); }
+    .stat-lbl { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Forms */
+    .fg { margin-bottom: 1rem; }
+    .fg label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
+    .fg input, .fg textarea, .fg select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); font-family: 'Inter', sans-serif; font-size: 0.92rem;
+      padding: 0.8rem 1rem; border-radius: 0.7rem; outline: none; transition: border-color 0.2s;
+    }
+    .fg input:focus, .fg textarea:focus, .fg select:focus { border-color: var(--gold); }
+    .fg input::placeholder, .fg textarea::placeholder { color: #444; }
+    .fg textarea { resize: vertical; min-height: 80px; }
+    .fg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .fg-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.4rem; border: none; border-radius: 0.7rem; font-family: 'Inter', sans-serif; font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: var(--gold); color: #000; }
+    .btn-primary:hover { background: #fbbf24; }
+    .btn-danger { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.25); }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+    .btn-success { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid rgba(16,185,129,0.25); }
+    .btn-success:hover { background: rgba(16,185,129,0.25); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Pricing rules */
+    .rule-item {
+      display: flex; align-items: center; gap: 0.75rem; padding: 0.9rem 1rem;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .rule-text { flex: 1; font-size: 0.88rem; }
+    .rule-badge { background: rgba(240,180,41,0.12); color: var(--gold); font-size: 0.78rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 100px; border: 1px solid rgba(240,180,41,0.2); }
+
+    /* Orders table */
+    .orders-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .orders-table th { text-align: left; padding: 0.7rem 1rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--border); }
+    .orders-table td { padding: 0.9rem 1rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .orders-table tr:last-child td { border-bottom: none; }
+    .orders-table tr:hover td { background: var(--surface2); }
+    .status-badge { display: inline-block; padding: 0.25rem 0.65rem; border-radius: 100px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .status-pending  { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+    .status-confirmed{ background: rgba(59,130,246,0.12); color: var(--info); border: 1px solid rgba(59,130,246,0.2); }
+    .status-shipped  { background: rgba(16,185,129,0.12); color: var(--success); border: 1px solid rgba(16,185,129,0.2); }
+    .status-cancelled{ background: rgba(239,68,68,0.12); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); }
+    .status-select { background: transparent; border: none; color: inherit; font-family: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; outline: none; }
+
+    /* Current item card */
+    .item-preview {
+      display: flex; gap: 1.5rem; align-items: flex-start;
+    }
+    .item-img-thumb {
+      width: 100px; height: 100px; border-radius: 0.75rem; overflow: hidden;
+      background: var(--surface2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 2.5rem;
+    }
+    .item-img-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .item-details { flex: 1; }
+    .item-name { font-size: 1.1rem; font-weight: 800; margin-bottom: 0.3rem; }
+    .item-meta { font-size: 0.83rem; color: var(--muted); margin-bottom: 0.75rem; line-height: 1.6; }
+    .item-stats { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .item-stat { background: var(--surface2); padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.82rem; }
+    .item-stat strong { color: var(--gold); }
+
+    /* Toggle switch */
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .toggle-label { font-size: 0.9rem; font-weight: 600; }
+    .toggle { position: relative; width: 48px; height: 26px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; cursor: pointer; background: var(--surface3);
+      border-radius: 26px; transition: 0.3s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute; height: 18px; width: 18px; left: 4px; bottom: 4px;
+      background: var(--muted); border-radius: 50%; transition: 0.3s;
+    }
+    .toggle input:checked + .toggle-slider { background: var(--gold2); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(22px); background: #fff; }
+
+    /* Notification */
+    .notif {
+      position: fixed; top: 1.5rem; right: 1.5rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem;
+      padding: 0.8rem 1.2rem; font-size: 0.85rem; z-index: 9999;
+      transform: translateX(200px); opacity: 0; transition: all 0.3s; max-width: 300px;
+    }
+    .notif.show { transform: translateX(0); opacity: 1; }
+    .notif.ok { border-color: rgba(16,185,129,0.4); color: var(--success); }
+    .notif.err { border-color: rgba(239,68,68,0.4); color: var(--danger); }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+    .tab-active { display: block !important; }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; bottom: auto; }
+      .sb-nav { display: flex; overflow-x: auto; padding: 0.5rem; }
+      .main-content { margin-left: 0; max-width: 100%; }
+      .layout { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── LOGIN ──────────────────────────────────────────────── -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">BAS<span>99</span></div>
+    <div class="login-sub">Admin Dashboard</div>
+    <input type="password" id="pwdInput" placeholder="Enter admin password" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="login-err" id="loginErr"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:1rem;" onclick="doLogin()">Sign In →</button>
+  </div>
+</div>
+
+<!-- ── DASHBOARD ───────────────────────────────────────────── -->
+<div id="dashScreen">
+  <div class="layout">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="sb-logo">BAS<span>99</span></div>
+      <div class="sb-nav">
+        <button class="sb-item active" onclick="switchTab('overview')" id="nav-overview"><span class="ico">📊</span> Overview</button>
+        <button class="sb-item" onclick="switchTab('newitem')" id="nav-newitem"><span class="ico">➕</span> New Item</button>
+        <button class="sb-item" onclick="switchTab('pricing')" id="nav-pricing"><span class="ico">📈</span> Pricing Rules</button>
+        <button class="sb-item" onclick="switchTab('orders')" id="nav-orders"><span class="ico">📦</span> Orders</button>
+        <button class="sb-item" onclick="switchTab('settings')" id="nav-settings"><span class="ico">⚙️</span> Settings</button>
+      </div>
+      <div class="sb-footer">
+        <button class="sb-item" onclick="doLogout()" style="color:var(--danger)"><span class="ico">🔓</span> Logout</button>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main class="main-content">
+
+      <!-- OVERVIEW TAB -->
+      <div id="tab-overview">
+        <div class="page-title">Dashboard Overview</div>
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-val" id="statOrders">—</div><div class="stat-lbl">Total Orders</div></div>
+          <div class="stat-card"><div class="stat-val" id="statRevenue">—</div><div class="stat-lbl">Revenue</div></div>
+          <div class="stat-card"><div class="stat-val" id="statQty">—</div><div class="stat-lbl">Units Left</div></div>
+          <div class="stat-card"><div class="stat-val" id="statPending">—</div><div class="stat-lbl">Pending Orders</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Current Item</div>
+          <div id="currentItemPreview"><div style="color:var(--muted);font-size:0.9rem;">No item active. Add one below.</div></div>
+          <hr class="divider">
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-ghost" onclick="switchTab('newitem')">+ Add / Replace Item</button>
+            <button class="btn btn-danger" onclick="markSoldOut()">Mark as Sold Out</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- NEW ITEM TAB -->
+      <div id="tab-newitem" style="display:none;">
+        <div class="page-title">Add / Replace Item</div>
+        <div class="card">
+          <div class="card-title">Item Details</div>
+          <div class="fg"><label>Item Name *</label><input id="niName" type="text" placeholder="e.g. Nike Air Max 90 — Size 42"></div>
+          <div class="fg"><label>Description</label><textarea id="niDesc" placeholder="Short description of the item…"></textarea></div>
+          <div class="fg"><label>Image URL</label><input id="niImage" type="url" placeholder="https://example.com/image.jpg" oninput="previewImg()"></div>
+          <div id="imgPreviewWrap" style="display:none;margin-bottom:1rem;">
+            <img id="imgPreview" src="" style="max-width:200px;border-radius:0.75rem;border:1px solid var(--border);">
+          </div>
+          <div class="fg-row">
+            <div class="fg"><label>Base Price *</label><input id="niPrice" type="number" min="0" step="0.01" placeholder="0.00"></div>
+            <div class="fg"><label>Initial Quantity *</label><input id="niQty" type="number" min="1" placeholder="e.g. 50"></div>
+          </div>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="publishItem()">🚀 Publish Item</button>
+            <button class="btn btn-ghost" onclick="clearNewItem()">Clear Form</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRICING RULES TAB -->
+      <div id="tab-pricing" style="display:none;">
+        <div class="page-title">Pricing Rules</div>
+        <div class="card">
+          <div class="card-title">How it works</div>
+          <p style="font-size:0.85rem;color:var(--muted);line-height:1.7;margin-bottom:1.5rem;">
+            When remaining quantity drops to or below a threshold, the price automatically increases by the set percentage.
+            Multiple rules can be active — the highest applicable increase wins.
+          </p>
+
+          <div id="rulesList" style="margin-bottom:1.5rem;"></div>
+
+          <hr class="divider">
+          <div class="card-title" style="margin-bottom:1rem;">Add New Rule</div>
+          <div class="fg-row3">
+            <div class="fg"><label>When qty ≤</label><input id="rQty" type="number" min="1" placeholder="e.g. 10"></div>
+            <div class="fg"><label>Increase price by (%)</label><input id="rPct" type="number" min="1" max="500" placeholder="e.g. 15"></div>
+            <div class="fg" style="display:flex;align-items:flex-end;">
+              <button class="btn btn-primary" style="width:100%;" onclick="addRule()">Add Rule</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ORDERS TAB -->
+      <div id="tab-orders" style="display:none;">
+        <div class="page-title">Orders</div>
+        <div style="display:flex;gap:0.75rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+          <button class="btn btn-ghost" onclick="filterOrders('all')" id="f-all">All</button>
+          <button class="btn btn-ghost" onclick="filterOrders('pending')" id="f-pending">Pending</button>
+          <button class="btn btn-ghost" onclick="filterOrders('confirmed')" id="f-confirmed">Confirmed</button>
+          <button class="btn btn-ghost" onclick="filterOrders('shipped')" id="f-shipped">Shipped</button>
+          <button class="btn btn-ghost" onclick="filterOrders('cancelled')" id="f-cancelled">Cancelled</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table class="orders-table">
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Customer</th>
+                  <th>Item</th>
+                  <th>Price</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="ordersBody">
+                <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;">Loading orders…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS TAB -->
+      <div id="tab-settings" style="display:none;">
+        <div class="page-title">Settings</div>
+
+        <div class="card">
+          <div class="card-title">Instagram Integration</div>
+          <div class="toggle-row">
+            <span class="toggle-label">Show Instagram Follow Button</span>
+            <label class="toggle"><input type="checkbox" id="igEnabled" onchange="saveSettings()"><span class="toggle-slider"></span></label>
+          </div>
+          <div class="fg"><label>Instagram Handle (e.g. @bas99.store)</label><input id="igHandle" type="text" placeholder="@yourhandle" oninput="saveSettings()"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Store Settings</div>
+          <div class="fg"><label>Currency Symbol</label><input id="setCurrency" type="text" placeholder="$ or € or AED" maxlength="5" oninput="saveSettings()"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Change Admin Password</div>
+          <div class="fg-row">
+            <div class="fg"><label>New Password</label><input id="newPwd" type="password" placeholder="New password"></div>
+            <div class="fg"><label>Confirm Password</label><input id="newPwd2" type="password" placeholder="Confirm password"></div>
+          </div>
+          <button class="btn btn-ghost" onclick="changePassword()">Update Password</button>
+        </div>
+
+        <div class="card" style="border-color:rgba(239,68,68,0.2);">
+          <div class="card-title" style="color:var(--danger);">Danger Zone</div>
+          <p style="font-size:0.85rem;color:var(--muted);margin-bottom:1rem;">Permanently mark the current item as sold out and clear it from the store.</p>
+          <button class="btn btn-danger" onclick="markSoldOut()">Force Sold Out &amp; Clear</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script>
+// ── FIREBASE CONFIG ───────────────────────────────────────────
+// Same config as index.html — replace with your credentials
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+
+// ── STATE ─────────────────────────────────────────────────────
+let allOrders = [], currentFilter = 'all', pricingRules = [], settings = {}, currentItem = null;
+
+// ── AUTH ──────────────────────────────────────────────────────
+async function doLogin() {
+  const pwd = document.getElementById('pwdInput').value;
+  if (!pwd) { document.getElementById('loginErr').textContent = 'Enter your password'; return; }
+  try {
+    const snap = await db.ref('settings/adminPassword').once('value');
+    const stored = snap.val();
+    if (!stored) {
+      // First time — set password
+      await db.ref('settings/adminPassword').set(pwd);
+      grantAccess();
+    } else if (stored === pwd) {
+      grantAccess();
+    } else {
+      document.getElementById('loginErr').textContent = 'Incorrect password';
+    }
+  } catch (e) {
+    document.getElementById('loginErr').textContent = 'Connection error. Check Firebase config.';
+    console.error(e);
+  }
+}
+
+function grantAccess() {
+  sessionStorage.setItem('bas99_admin', '1');
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('dashScreen').style.display = 'block';
+  loadDashboard();
+}
+
+function doLogout() {
+  sessionStorage.removeItem('bas99_admin');
+  location.reload();
+}
+
+function checkSession() {
+  if (sessionStorage.getItem('bas99_admin')) grantAccess();
+}
+
+// ── LOAD DASHBOARD ────────────────────────────────────────────
+function loadDashboard() {
+  // Settings
+  db.ref('settings').on('value', snap => {
+    settings = snap.val() || {};
+    document.getElementById('igHandle').value   = settings.instagramHandle || '';
+    document.getElementById('igEnabled').checked = !!settings.instagramEnabled;
+    document.getElementById('setCurrency').value = settings.currency || '$';
+  });
+
+  // Current item
+  db.ref('currentItem').on('value', snap => {
+    currentItem = snap.val();
+    renderCurrentItem(currentItem);
+    updateStats();
+    renderRules(currentItem ? (currentItem.pricingRules || []) : []);
+  });
+
+  // Orders
+  db.ref('orders').on('value', snap => {
+    allOrders = [];
+    snap.forEach(child => allOrders.push(child.val()));
+    allOrders.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    renderOrders();
+    updateStats();
+  });
+}
+
+// ── STATS ─────────────────────────────────────────────────────
+function updateStats() {
+  const sym = settings.currency || '$';
+  document.getElementById('statOrders').textContent  = allOrders.length;
+  const rev = allOrders.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+(o.price||0),0);
+  document.getElementById('statRevenue').textContent = sym + rev.toFixed(2);
+  document.getElementById('statQty').textContent     = currentItem ? (currentItem.currentQty || 0) : '—';
+  document.getElementById('statPending').textContent = allOrders.filter(o=>o.status==='pending').length;
+}
+
+// ── CURRENT ITEM ──────────────────────────────────────────────
+function renderCurrentItem(d) {
+  const el = document.getElementById('currentItemPreview');
+  if (!d || !d.isActive) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No item active.</div>';
+    return;
+  }
+  const sym = settings.currency || '$';
+  el.innerHTML = `
+    <div class="item-preview">
+      <div class="item-img-thumb">
+        ${d.imageUrl ? `<img src="${d.imageUrl}" alt="">` : '📦'}
+      </div>
+      <div class="item-details">
+        <div class="item-name">${d.name}</div>
+        <div class="item-meta">${d.description || ''}</div>
+        <div class="item-stats">
+          <div class="item-stat">Base Price: <strong>${sym}${(d.basePrice||0).toFixed(2)}</strong></div>
+          <div class="item-stat">Remaining: <strong>${d.currentQty || 0}</strong> / ${d.initialQty || 0}</div>
+          <div class="item-stat">Status: <strong style="color:${d.currentQty>0?'var(--success)':'var(--danger)'}">${d.currentQty>0?'Active':'Sold Out'}</strong></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── PUBLISH ITEM ──────────────────────────────────────────────
+async function publishItem() {
+  const name  = document.getElementById('niName').value.trim();
+  const price = parseFloat(document.getElementById('niPrice').value);
+  const qty   = parseInt(document.getElementById('niQty').value);
+  if (!name || isNaN(price) || isNaN(qty) || qty < 1) { notify('Fill in all required fields', 'err'); return; }
+
+  const item = {
+    id: 'item_' + Date.now(),
+    name,
+    description: document.getElementById('niDesc').value.trim(),
+    imageUrl: document.getElementById('niImage').value.trim(),
+    basePrice: price,
+    currentPrice: price,
+    initialQty: qty,
+    currentQty: qty,
+    isActive: true,
+    pricingRules: currentItem ? (currentItem.pricingRules || []) : [],
+    createdAt: firebase.database.ServerValue.TIMESTAMP
+  };
+
+  try {
+    // Archive old item if exists
+    if (currentItem && currentItem.id) {
+      await db.ref('archivedItems/' + currentItem.id).set(currentItem);
+    }
+    await db.ref('currentItem').set(item);
+    notify('Item published!', 'ok');
+    clearNewItem();
+    switchTab('overview');
+  } catch (e) { notify('Error publishing item', 'err'); console.error(e); }
+}
+
+function clearNewItem() {
+  ['niName','niDesc','niImage','niPrice','niQty'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('imgPreviewWrap').style.display = 'none';
+}
+
+function previewImg() {
+  const url = document.getElementById('niImage').value.trim();
+  const wrap = document.getElementById('imgPreviewWrap');
+  if (url) { document.getElementById('imgPreview').src = url; wrap.style.display = 'block'; }
+  else wrap.style.display = 'none';
+}
+
+// ── PRICING RULES ─────────────────────────────────────────────
+function renderRules(rules) {
+  pricingRules = rules || [];
+  const el = document.getElementById('rulesList');
+  if (!pricingRules.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:0.88rem;">No rules set. Add one below.</p>';
+    return;
+  }
+  const sym = settings.currency || '$';
+  const sorted = [...pricingRules].sort((a,b) => b.qtyThreshold - a.qtyThreshold);
+  el.innerHTML = sorted.map((r,i) => `
+    <div class="rule-item">
+      <div class="rule-text">
+        When qty drops to <strong>${r.qtyThreshold}</strong> or below →
+        price increases by <strong>${r.increasePercent}%</strong>
+        ${currentItem ? `(→ ${sym}${(currentItem.basePrice*(1+r.increasePercent/100)).toFixed(2)})` : ''}
+      </div>
+      <span class="rule-badge">+${r.increasePercent}%</span>
+      <button class="btn btn-danger" style="padding:0.4rem 0.8rem;font-size:0.78rem;" onclick="deleteRule(${pricingRules.indexOf(r)})">✕</button>
+    </div>`).join('');
+}
+
+async function addRule() {
+  const qty = parseInt(document.getElementById('rQty').value);
+  const pct = parseFloat(document.getElementById('rPct').value);
+  if (isNaN(qty) || isNaN(pct) || qty < 1 || pct <= 0) { notify('Enter valid qty and percent', 'err'); return; }
+  if (!currentItem) { notify('Publish an item first', 'err'); return; }
+
+  const newRule = { qtyThreshold: qty, increasePercent: pct };
+  const updated = [...pricingRules, newRule];
+  try {
+    await db.ref('currentItem/pricingRules').set(updated);
+    document.getElementById('rQty').value = '';
+    document.getElementById('rPct').value = '';
+    notify('Rule added', 'ok');
+  } catch (e) { notify('Error saving rule', 'err'); }
+}
+
+async function deleteRule(index) {
+  const updated = pricingRules.filter((_,i) => i !== index);
+  try {
+    await db.ref('currentItem/pricingRules').set(updated);
+    notify('Rule removed', 'ok');
+  } catch (e) { notify('Error removing rule', 'err'); }
+}
+
+// ── ORDERS ────────────────────────────────────────────────────
+function renderOrders() {
+  const filtered = currentFilter === 'all' ? allOrders : allOrders.filter(o => o.status === currentFilter);
+  const sym = settings.currency || '$';
+  const tbody = document.getElementById('ordersBody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;">No ${currentFilter === 'all' ? '' : currentFilter+' '}orders</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(o => {
+    const date = o.timestamp ? new Date(o.timestamp).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    return `
+    <tr>
+      <td style="font-family:monospace;font-size:0.78rem;color:var(--muted)">${o.id || '—'}</td>
+      <td>
+        <div style="font-weight:600;margin-bottom:2px">${o.customer?.name || '—'}</div>
+        <div style="font-size:0.78rem;color:var(--muted)">${o.customer?.phone || ''}</div>
+        <div style="font-size:0.78rem;color:var(--muted)">${o.customer?.email || ''}</div>
+        <div style="font-size:0.78rem;color:var(--muted)">${o.customer?.address || ''}</div>
+      </td>
+      <td>${o.itemName || '—'}</td>
+      <td style="font-weight:700;color:var(--gold)">${sym}${(o.price||0).toFixed(2)}</td>
+      <td style="font-size:0.82rem;color:var(--muted)">${date}</td>
+      <td>
+        <select class="status-badge status-${o.status||'pending'}" onchange="updateOrderStatus('${o.id}',this.value,this)">
+          <option value="pending"   ${o.status==='pending'?'selected':''}>Pending</option>
+          <option value="confirmed" ${o.status==='confirmed'?'selected':''}>Confirmed</option>
+          <option value="shipped"   ${o.status==='shipped'?'selected':''}>Shipped</option>
+          <option value="cancelled" ${o.status==='cancelled'?'selected':''}>Cancelled</option>
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function updateOrderStatus(id, status, el) {
+  el.className = `status-badge status-${status}`;
+  try {
+    await db.ref('orders/' + id + '/status').set(status);
+    notify('Order updated', 'ok');
+  } catch (e) { notify('Error updating order', 'err'); }
+}
+
+function filterOrders(f) {
+  currentFilter = f;
+  document.querySelectorAll('[id^="f-"]').forEach(b => b.classList.remove('btn-primary'));
+  document.getElementById('f-' + f).classList.add('btn-primary');
+  renderOrders();
+}
+
+// ── SETTINGS ──────────────────────────────────────────────────
+let saveTimer;
+function saveSettings() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const handle  = document.getElementById('igHandle').value.trim();
+    const enabled = document.getElementById('igEnabled').checked;
+    const currency= document.getElementById('setCurrency').value.trim() || '$';
+    try {
+      await db.ref('settings').update({ instagramHandle: handle, instagramEnabled: enabled, currency });
+      notify('Settings saved', 'ok');
+    } catch (e) { notify('Error saving settings', 'err'); }
+  }, 600);
+}
+
+async function changePassword() {
+  const p1 = document.getElementById('newPwd').value;
+  const p2 = document.getElementById('newPwd2').value;
+  if (!p1) { notify('Enter a new password', 'err'); return; }
+  if (p1 !== p2) { notify('Passwords do not match', 'err'); return; }
+  try {
+    await db.ref('settings/adminPassword').set(p1);
+    document.getElementById('newPwd').value = '';
+    document.getElementById('newPwd2').value = '';
+    notify('Password updated!', 'ok');
+  } catch (e) { notify('Error updating password', 'err'); }
+}
+
+async function markSoldOut() {
+  if (!confirm('Mark current item as sold out? It will no longer be visible on the store.')) return;
+  try {
+    await db.ref('currentItem/isActive').set(false);
+    await db.ref('currentItem/currentQty').set(0);
+    notify('Item marked as sold out', 'ok');
+  } catch (e) { notify('Error', 'err'); }
+}
+
+// ── TAB NAVIGATION ────────────────────────────────────────────
+function switchTab(name) {
+  ['overview','newitem','pricing','orders','settings'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
+    const nav = document.getElementById('nav-' + t);
+    if (nav) nav.classList.toggle('active', t === name);
+  });
+}
+
+// ── NOTIFY ────────────────────────────────────────────────────
+let nTimer;
+function notify(msg, type = 'ok') {
+  const el = document.getElementById('notif');
+  el.textContent = msg;
+  el.className = 'notif ' + type + ' show';
+  clearTimeout(nTimer);
+  nTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── BOOT ──────────────────────────────────────────────────────
+checkSession();
+</script>
+</body>
+</html>
