@@ -263,6 +263,7 @@
           <div class="card-title">Current Item</div>
           <div id="currentItemPreview"><div style="color:var(--muted);font-size:0.9rem;">No item active. Add one below.</div></div>
           <hr class="divider">
+          <div id="lotteryStatus" style="display:none;margin-bottom:1rem;"></div>
           <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
             <button class="btn btn-primary" onclick="editCurrentItem()">✏️ Edit Current Item</button>
             <button class="btn btn-ghost" onclick="switchTab('newitem')">+ New Item</button>
@@ -293,7 +294,18 @@
             <div class="fg"><label>Base Price *</label><input id="niPrice" type="number" min="0" step="0.01" placeholder="0.00"></div>
             <div class="fg"><label>Initial Quantity *</label><input id="niQty" type="number" min="1" placeholder="e.g. 50"></div>
           </div>
-          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+
+          <hr class="divider">
+          <div class="card-title">🎰 Lottery (Optional)</div>
+          <div class="toggle-row" style="margin-bottom:0.75rem;">
+            <span class="toggle-label" style="font-size:0.9rem;">Enable Lottery — one lucky buyer wins free</span>
+            <label class="toggle"><input type="checkbox" id="niLottery"><span class="toggle-slider"></span></label>
+          </div>
+          <div id="lotteryOptions" style="display:none;">
+            <div class="fg"><label>Lucky Order Number (leave blank = random)</label><input id="niLotteryNum" type="number" min="1" placeholder="e.g. 42 — or leave blank for random"></div>
+          </div>
+
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:1rem;">
             <button class="btn btn-primary" onclick="publishItem()">🚀 Publish Item</button>
             <button class="btn btn-ghost" onclick="clearNewItem()">Clear Form</button>
           </div>
@@ -522,9 +534,10 @@ function updateStats() {
 // ── CURRENT ITEM ──────────────────────────────────────────────
 function renderCurrentItem(d) {
   const el = document.getElementById('currentItemPreview');
+  const ls = document.getElementById('lotteryStatus');
   if (!d || !d.isActive) {
     el.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;">No item active.</div>';
-    return;
+    ls.style.display = 'none'; return;
   }
   const sym = settings.currency || '$';
   el.innerHTML = `
@@ -538,10 +551,31 @@ function renderCurrentItem(d) {
         <div class="item-stats">
           <div class="item-stat">Base Price: <strong>${sym}${(d.basePrice||0).toFixed(2)}</strong></div>
           <div class="item-stat">Remaining: <strong>${d.currentQty || 0}</strong> / ${d.initialQty || 0}</div>
+          <div class="item-stat">Orders: <strong>${d.orderCount || 0}</strong></div>
           <div class="item-stat">Status: <strong style="color:${d.currentQty>0?'var(--success)':'var(--danger)'}">${d.currentQty>0?'Active':'Sold Out'}</strong></div>
         </div>
       </div>
     </div>`;
+
+  // Lottery status
+  if (d.lotteryEnabled) {
+    ls.style.display = 'block';
+    if (d.lotteryWinner) {
+      ls.innerHTML = `<div style="background:rgba(240,180,41,0.12);border:1px solid rgba(240,180,41,0.3);border-radius:0.75rem;padding:1rem;">
+        <div style="font-size:0.8rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;">🏆 Lottery Winner</div>
+        <div style="font-weight:700;font-size:1rem;">${d.lotteryWinner.name}</div>
+        <div style="font-size:0.82rem;color:var(--muted);">Order #${d.lotteryWinner.orderNumber} · ${d.lotteryWinner.orderId}</div>
+      </div>`;
+    } else {
+      ls.innerHTML = `<div style="background:rgba(123,0,128,0.12);border:1px solid rgba(123,0,128,0.3);border-radius:0.75rem;padding:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+        <div>
+          <div style="font-size:0.8rem;font-weight:700;color:#C060C8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.3rem;">🎰 Lottery Active</div>
+          <div style="font-size:0.85rem;color:var(--muted);">Lucky order #${d.lotteryNumber} wins free · ${d.orderCount||0} orders placed</div>
+        </div>
+        <button class="btn btn-ghost" onclick="revealLotteryNumber()">👁 Reveal Number</button>
+      </div>`;
+    }
+  } else { ls.style.display = 'none'; }
 }
 
 // ── PUBLISH ITEM ──────────────────────────────────────────────
@@ -570,6 +604,16 @@ async function publishItem() {
     }
   }
 
+  // Lottery
+  const lotteryEnabled = document.getElementById('niLottery').checked;
+  let lotteryNumber = null;
+  if (lotteryEnabled && !editingCurrent) {
+    const custom = parseInt(document.getElementById('niLotteryNum').value);
+    lotteryNumber = (!isNaN(custom) && custom >= 1 && custom <= qty)
+      ? custom
+      : Math.floor(Math.random() * qty) + 1;
+  }
+
   const item = editingCurrent ? {
     ...currentItem,
     name,
@@ -588,7 +632,11 @@ async function publishItem() {
     currentPrice: price,
     initialQty: qty,
     currentQty: qty,
+    orderCount: 0,
     isActive: true,
+    lotteryEnabled,
+    lotteryNumber,
+    lotteryWinner: null,
     pricingRules: currentItem ? (currentItem.pricingRules || []) : [],
     createdAt: firebase.database.ServerValue.TIMESTAMP
   };
@@ -609,7 +657,9 @@ async function publishItem() {
 function clearNewItem() {
   editingCurrent = false;
   document.getElementById('newitemTitle').textContent = 'Add / Replace Item';
-  ['niName','niDesc','niPrice','niQty'].forEach(id => document.getElementById(id).value = '');
+  ['niName','niDesc','niPrice','niQty','niLotteryNum'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('niLottery').checked = false;
+  document.getElementById('lotteryOptions').style.display = 'none';
   document.getElementById('niImageFile').value = '';
   document.getElementById('imgFileName').textContent = 'No file chosen';
   document.getElementById('imgPreviewWrap').style.display = 'none';
@@ -790,6 +840,20 @@ function switchTab(name) {
 }
 
 // ── SIDEBAR TOGGLE (MOBILE) ────────────────────────────────────
+function revealLotteryNumber() {
+  if (!currentItem) return;
+  alert(`🎰 Lucky Order Number: #${currentItem.lotteryNumber}\n\nKeep this secret until sold out!`);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const lotteryToggle = document.getElementById('niLottery');
+  if (lotteryToggle) {
+    lotteryToggle.addEventListener('change', () => {
+      document.getElementById('lotteryOptions').style.display = lotteryToggle.checked ? 'block' : 'none';
+    });
+  }
+});
+
 function toggleSidebar(force) {
   const sb = document.querySelector('.sidebar');
   const ov = document.getElementById('sbOverlay');
