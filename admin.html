@@ -7,7 +7,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -534,20 +533,16 @@ async function publishItem() {
   const file = fileInput.files[0];
   if (file) {
     try {
-      notify('Uploading photo…', 'ok');
-      const uploadPromise = new Promise(async (resolve, reject) => {
-        try {
-          const storage = firebase.storage();
-          const ref = storage.ref('items/' + Date.now() + '_' + file.name);
-          await ref.put(file);
-          resolve(await ref.getDownloadURL());
-        } catch(e) { reject(e); }
+      notify('Processing photo…', 'ok');
+      imageUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
       });
-      const timeout = new Promise((_,reject) => setTimeout(() => reject(new Error('timeout')), 15000));
-      imageUrl = await Promise.race([uploadPromise, timeout]);
     } catch (e) {
       console.error(e);
-      notify('Photo upload failed — publishing without photo', 'err');
+      notify('Photo error — publishing without photo', 'err');
       imageUrl = fileInput.dataset.existingUrl || '';
     }
   }
