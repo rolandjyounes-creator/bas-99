@@ -535,11 +535,21 @@ async function publishItem() {
   if (file) {
     try {
       notify('Uploading photo…', 'ok');
-      const storage = firebase.storage();
-      const ref = storage.ref('items/' + Date.now() + '_' + file.name);
-      await ref.put(file);
-      imageUrl = await ref.getDownloadURL();
-    } catch (e) { notify('Photo upload failed', 'err'); console.error(e); return; }
+      const uploadPromise = new Promise(async (resolve, reject) => {
+        try {
+          const storage = firebase.storage();
+          const ref = storage.ref('items/' + Date.now() + '_' + file.name);
+          await ref.put(file);
+          resolve(await ref.getDownloadURL());
+        } catch(e) { reject(e); }
+      });
+      const timeout = new Promise((_,reject) => setTimeout(() => reject(new Error('timeout')), 15000));
+      imageUrl = await Promise.race([uploadPromise, timeout]);
+    } catch (e) {
+      console.error(e);
+      notify('Photo upload failed — publishing without photo', 'err');
+      imageUrl = fileInput.dataset.existingUrl || '';
+    }
   }
 
   const item = editingCurrent ? {
