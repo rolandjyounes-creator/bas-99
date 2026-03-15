@@ -10,9 +10,9 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #070707; --surface: #101010; --surface2: #181818; --surface3: #222;
-      --gold: #f0b429; --gold2: #d97706; --text: #f0f0f0; --muted: #777;
-      --danger: #ef4444; --success: #10b981; --info: #3b82f6; --border: #1e1e1e;
+      --bg: #07030D; --surface: #100818; --surface2: #1A0E28; --surface3: #251535;
+      --gold: #E8621A; --gold2: #B8460E; --text: #F0E6D3; --muted: #907085;
+      --danger: #ef4444; --success: #10b981; --info: #3b82f6; --border: #2D1440;
       --sidebar: 220px;
     }
     body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
@@ -371,6 +371,20 @@
         <div class="card">
           <div class="card-title">Store Settings</div>
           <div class="fg"><label>Currency Symbol</label><input id="setCurrency" type="text" placeholder="$ or € or AED" maxlength="5" oninput="saveSettings()"></div>
+          <div class="fg"><label>Store Name (shown on logo)</label><input id="setStoreName" type="text" placeholder="BAS99" oninput="saveSettings()"></div>
+          <div class="fg"><label>Store Tagline</label><input id="setStoreTagline" type="text" placeholder="Official Store" oninput="saveSettings()"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Logo Photo (Animated Avatar)</div>
+          <input type="file" id="logoPhotoFile" accept="image/*" style="display:none" onchange="uploadLogoPhoto()">
+          <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+            <div id="logoPreviewWrap" style="width:80px;height:80px;border-radius:50%;overflow:hidden;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0;">🔥</div>
+            <div>
+              <button type="button" class="btn btn-ghost" onclick="document.getElementById('logoPhotoFile').click()">📷 Upload Face Photo</button>
+              <div style="font-size:0.78rem;color:var(--muted);margin-top:0.4rem;">This appears as the animated logo on the store page</div>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -463,9 +477,14 @@ function loadDashboard() {
   // Settings
   db.ref('settings').on('value', snap => {
     settings = snap.val() || {};
-    document.getElementById('igHandle').value   = settings.instagramHandle || '';
-    document.getElementById('igEnabled').checked = !!settings.instagramEnabled;
-    document.getElementById('setCurrency').value = settings.currency || '$';
+    document.getElementById('igHandle').value        = settings.instagramHandle || '';
+    document.getElementById('igEnabled').checked      = !!settings.instagramEnabled;
+    document.getElementById('setCurrency').value      = settings.currency || '$';
+    document.getElementById('setStoreName').value     = settings.storeName || '';
+    document.getElementById('setStoreTagline').value  = settings.storeTagline || '';
+    if (settings.logoPhoto) {
+      document.getElementById('logoPreviewWrap').innerHTML = `<img src="${settings.logoPhoto}" style="width:100%;height:100%;object-fit:cover;">`;
+    }
   });
 
   // Current item
@@ -710,14 +729,31 @@ let saveTimer;
 function saveSettings() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
-    const handle  = document.getElementById('igHandle').value.trim();
-    const enabled = document.getElementById('igEnabled').checked;
-    const currency= document.getElementById('setCurrency').value.trim() || '$';
+    const handle      = document.getElementById('igHandle').value.trim();
+    const enabled     = document.getElementById('igEnabled').checked;
+    const currency    = document.getElementById('setCurrency').value.trim() || '$';
+    const storeName   = document.getElementById('setStoreName').value.trim();
+    const storeTagline= document.getElementById('setStoreTagline').value.trim();
     try {
-      await db.ref('settings').update({ instagramHandle: handle, instagramEnabled: enabled, currency });
+      await db.ref('settings').update({ instagramHandle: handle, instagramEnabled: enabled, currency, storeName, storeTagline });
       notify('Settings saved', 'ok');
     } catch (e) { notify('Error saving settings', 'err'); }
   }, 600);
+}
+
+async function uploadLogoPhoto() {
+  const file = document.getElementById('logoPhotoFile').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const data = e.target.result;
+    try {
+      await db.ref('settings/logoPhoto').set(data);
+      document.getElementById('logoPreviewWrap').innerHTML = `<img src="${data}" style="width:100%;height:100%;object-fit:cover;">`;
+      notify('Logo photo saved!', 'ok');
+    } catch(err) { notify('Error saving photo', 'err'); }
+  };
+  reader.readAsDataURL(file);
 }
 
 async function changePassword() {
