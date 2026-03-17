@@ -579,7 +579,7 @@ function renderIG() {
   const h = settings.instagramHandle;
   const btnMain  = document.getElementById('igBtn');
   const btnEmpty = document.getElementById('igBtnEmpty');
-  if (h) {
+  if (h && settings.instagramEnabled) {
     const url = 'https://instagram.com/' + h.replace('@', '');
     btnMain.href = url; btnMain.style.display = 'flex';
     document.getElementById('igBtnText').textContent = 'Follow @' + h.replace('@', '') + ' on Instagram';
