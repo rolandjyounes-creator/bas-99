@@ -387,6 +387,10 @@
     <div class="step-body" id="s3" style="display:none;">
       <div class="step-head">Review & Confirm</div>
       <div class="summary-card" id="s3Card"></div>
+      <div id="s3Lottery" style="display:none;margin-bottom:1rem;background:rgba(123,0,128,0.12);border:1px solid rgba(123,0,128,0.3);border-radius:0.75rem;padding:0.9rem 1rem;font-size:0.85rem;color:#C060C8;text-align:center;">
+        🎰 <strong>Lucky Draw Active!</strong><br>
+        <span style="color:var(--muted);font-size:0.8rem;">One lucky order wins this item FREE — you'd only pay the $3 delivery!</span>
+      </div>
       <div class="cod-box">✓ Payment: <strong>Cash on Delivery (COD)</strong> — pay when your order arrives</div>
       <button class="btn-next" id="btnPlace" onclick="placeOrder()">PLACE ORDER</button>
       <button class="btn-back" onclick="goStep(2)">← Back</button>
@@ -427,6 +431,7 @@ const db = firebase.database();
 
 // ─── STATE ────────────────────────────────────────────────────
 let item = null, settings = {}, currentPrice = 0, currentQty = 0, initQty = 1, step = 1;
+const DELIVERY = 3;
 
 // ─── INIT ─────────────────────────────────────────────────────
 function init() {
@@ -551,7 +556,7 @@ function renderProduct(d) {
   const lb = document.getElementById('lotteryBadge');
   const wb = document.getElementById('winnerBanner');
   if (d.lotteryEnabled) {
-    lb.style.display = d.lotteryWinner ? 'none' : 'block';
+    lb.style.display = 'none'; // revealed only at checkout
     if (d.lotteryWinner) {
       wb.style.display = 'block';
       document.getElementById('winnerText').textContent = `🎉 ${d.lotteryWinner.name} won this item FREE with order #${d.lotteryWinner.orderNumber}!`;
@@ -594,7 +599,9 @@ function openCheckout() {
   document.getElementById('s1Card').innerHTML = `
     <div class="srow"><span class="lbl">Item</span><span style="font-weight:600">${item.name}</span></div>
     <div class="srow"><span class="lbl">Quantity</span><span>1 unit</span></div>
-    <div class="srow total"><span>Total</span><span style="color:var(--gold)">${sym}${currentPrice.toFixed(2)}</span></div>`;
+    <div class="srow"><span class="lbl">Item Price</span><span>${sym}${currentPrice.toFixed(2)}</span></div>
+    <div class="srow"><span class="lbl">Delivery</span><span>${sym}${DELIVERY.toFixed(2)}</span></div>
+    <div class="srow total"><span>Total</span><span style="color:var(--gold)">${sym}${(currentPrice + DELIVERY).toFixed(2)}</span></div>`;
 
   // Autofill from localStorage
   const saved = JSON.parse(localStorage.getItem('bas99_customer') || '{}');
@@ -637,7 +644,11 @@ function goStep(n) {
       <div class="srow"><span class="lbl">Phone</span><span>${phone}</span></div>
       <div class="srow"><span class="lbl">Email</span><span style="font-size:0.83rem">${email}</span></div>
       <div class="srow"><span class="lbl">Address</span><span style="text-align:right;max-width:60%;font-size:0.85rem">${addr}, ${city}${v('fState') ? ', '+v('fState') : ''}</span></div>
-      <div class="srow total"><span>Total</span><span style="color:var(--gold)">${sym}${currentPrice.toFixed(2)}</span></div>`;
+      <div style="border-top:1px solid var(--border);margin:0.4rem 0"></div>
+      <div class="srow"><span class="lbl">Item Price</span><span>${sym}${currentPrice.toFixed(2)}</span></div>
+      <div class="srow"><span class="lbl">Delivery</span><span>${sym}${DELIVERY.toFixed(2)}</span></div>
+      <div class="srow total"><span>Total</span><span style="color:var(--gold)">${sym}${(currentPrice + DELIVERY).toFixed(2)}</span></div>`;
+    document.getElementById('s3Lottery').style.display = item.lotteryEnabled ? 'block' : 'none';
   }
   step = n; updateSteps();
 }
@@ -676,9 +687,11 @@ async function placeOrder() {
   const orderNumber = countResult.snapshot.val();
 
   const isWinner = item.lotteryEnabled && orderNumber === item.lotteryNumber;
+  const itemPrice = isWinner ? 0 : currentPrice;
   const order = {
     id: orderId, itemId: item.id || 'item', itemName: item.name,
-    price: currentPrice, currency: sym, qty: 1, status: 'pending', payment: 'COD',
+    price: itemPrice, delivery: DELIVERY, total: itemPrice + DELIVERY,
+    currency: sym, qty: 1, status: 'pending', payment: 'COD',
     orderNumber, isWinner: isWinner || false,
     customer: {
       name: v('fName'), phone: v('fPhone'), email: v('fEmail'),
@@ -708,6 +721,21 @@ async function placeOrder() {
       await db.ref('currentItem/currentPrice').set(newPrice);
     }
 
+    // Telegram notification
+    const tgMsg = `🛒 *New Order — BAS99*\n\n`
+      + `📦 *${order.itemName}*\n`
+      + `💰 Item: ${isWinner ? 'FREE (lottery winner)' : sym + order.price.toFixed(2)}\n`
+      + `🚚 Delivery: ${sym}${DELIVERY.toFixed(2)}\n`
+      + `💵 Total COD: ${sym}${order.total.toFixed(2)}\n`
+      + `🔢 Order #${orderNumber}  |  ID: ${orderId}\n\n`
+      + `👤 ${order.customer.name}\n`
+      + `📞 ${order.customer.phone}\n`
+      + `📍 ${order.customer.address}\n`
+      + (order.customer.email ? `📧 ${order.customer.email}\n` : '')
+      + (isWinner ? `\n🏆 *LOTTERY WINNER! Collect $${DELIVERY} delivery only.*` : '');
+    const tgParams = new URLSearchParams({ chat_id: -5189782935, text: tgMsg, parse_mode: 'Markdown' });
+    fetch(`https://api.telegram.org/bot8223189720:AAF9qvX9uVHlI-6M6U4LMklh7fEqqQDn8KI/sendMessage?${tgParams}`, { mode: 'no-cors' }).catch(() => {});
+
     // Success screen
     document.getElementById('s3').style.display = 'none';
     document.getElementById('orderIdBox').textContent = `Order ID: ${orderId}`;
@@ -721,16 +749,16 @@ async function placeOrder() {
       if (isWinner) {
         document.getElementById('successIcon').textContent = '🏆';
         document.getElementById('successTitle').textContent = 'YOU WON THE LOTTERY!';
-        document.getElementById('successMsg').textContent = 'Congratulations! You are the lucky buyer — this item is yours FREE!';
+        document.getElementById('successMsg').textContent = 'Congratulations! This item is yours FREE — just pay $3 delivery when it arrives.';
         lr.style.background = 'rgba(240,180,41,0.12)';
         lr.style.border = '1px solid rgba(240,180,41,0.4)';
         lr.style.color = 'var(--gold)';
-        lr.innerHTML = `🎰 You are lucky order <strong>#${orderNumber}</strong> — THE WINNING NUMBER! No payment needed.`;
+        lr.innerHTML = `🎰 You are lucky order <strong>#${orderNumber}</strong> — THE WINNING NUMBER!<br><strong>Item: FREE · Delivery: $${DELIVERY}</strong>`;
       } else {
         lr.style.background = 'rgba(123,0,128,0.1)';
         lr.style.border = '1px solid rgba(123,0,128,0.3)';
         lr.style.color = '#C060C8';
-        lr.innerHTML = `🎰 Your lottery number: <strong>#${orderNumber}</strong> — Winner announced when sold out!`;
+        lr.innerHTML = `🎰 Your lottery number: <strong>#${orderNumber}</strong> — Winner announced when sold out!<br><span style="font-size:0.78rem;color:var(--muted)">Total COD: $${(currentPrice + DELIVERY).toFixed(2)}</span>`;
       }
     }
   } catch (e) {
